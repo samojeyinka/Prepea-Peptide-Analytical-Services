@@ -43,21 +43,26 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --include=dev
-      - run: npx jest --config jest.config.cjs --coverage --ci
-      - name: Check coverage thresholds
+      - run: node -e "console.log(require.resolve('ts-jest'))"
+      - run: npm run test:check
+
+  coverage:
+    name: Test Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --include=dev
+      - run: node -e "console.log(require.resolve('ts-jest'))"
+      - run: npm run test:coverage -- --ci --coverageReporters=text --coverageReporters=json-summary
+      - name: Enforce 90 percent line coverage
         run: |
-          npx jest --config jest.config.cjs --coverage --ci --coverageReporters=json-summary
-          COVERAGE=$(cat coverage/coverage-summary.json | node -e "
-            const data = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
-            const lines = data.total.lines.pct;
-            const funcs = data.total.functions.pct;
-            const branches = data.total.branches.pct;
-            const stmts = data.total.statements.pct;
-            console.log(JSON.stringify({lines,funcs,branches,stmts}));
-          ")
-          echo "Coverage: $COVERAGE"
-          LINES=$(echo $COVERAGE | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).lines)")
-          if [ $(echo "$LINES < 90" | bc) -eq 1 ]; then
+          LINES=$(node -p "require('./coverage/coverage-summary.json').total.lines.pct")
+          echo "Line coverage: ${LINES}%"
+          if node -e "process.exit(Number(process.argv[1]) < 90 ? 0 : 1)" "$LINES"; then
             echo "::error::Line coverage $LINES% is below 90% threshold"
             exit 1
           fi

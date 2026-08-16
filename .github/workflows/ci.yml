@@ -21,7 +21,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      - run: npm ci --include=dev
       - name: Validate commit messages
         shell: bash
         run: |
@@ -42,7 +42,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      - run: npm ci --include=dev
       - run: npx jest --config jest.config.cjs --coverage --ci
       - name: Check coverage thresholds
         run: |
@@ -72,7 +72,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      - run: npm ci --include=dev
       - run: npm audit --audit-level=high
       - name: Check for known vulnerabilities
         run: |
@@ -92,7 +92,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      - run: npm ci --include=dev
       - run: npx tsc -b
       - run: npm run build
       - name: Upload build artifact

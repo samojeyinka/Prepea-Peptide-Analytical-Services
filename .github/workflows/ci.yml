@@ -1,0 +1,95 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  commit-lint:
+    name: Lint Commit Messages
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+
+  test:
+    name: Test & Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx jest --config jest.config.cjs --coverage --ci
+      - name: Check coverage thresholds
+        run: |
+          npx jest --config jest.config.cjs --coverage --ci --coverageReporters=json-summary
+          COVERAGE=$(cat coverage/coverage-summary.json | node -e "
+            const data = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+            const lines = data.total.lines.pct;
+            const funcs = data.total.functions.pct;
+            const branches = data.total.branches.pct;
+            const stmts = data.total.statements.pct;
+            console.log(JSON.stringify({lines,funcs,branches,stmts}));
+          ")
+          echo "Coverage: $COVERAGE"
+          LINES=$(echo $COVERAGE | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).lines)")
+          if [ $(echo "$LINES < 90" | bc) -eq 1 ]; then
+            echo "::error::Line coverage $LINES% is below 90% threshold"
+            exit 1
+          fi
+          echo "Line coverage $LINES% meets 90% threshold"
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm audit --audit-level=high
+      - name: Check for known vulnerabilities
+        run: |
+          AUDIT=$(npm audit --json 2>/dev/null || true)
+          HIGH=$(echo $AUDIT | node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); console.log((d.metadata?.vulnerabilities?.high||0)+(d.metadata?.vulnerabilities?.critical||0))")
+          if [ "$HIGH" -gt 0 ]; then
+            echo "::warning::Found $HIGH high/critical vulnerabilities. Run 'npm audit fix' to resolve."
+          fi
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [test, security]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx tsc -b
+      - run: npm run build
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7

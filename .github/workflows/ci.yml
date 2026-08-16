@@ -34,7 +34,7 @@ jobs:
           fi
 
   test:
-    name: Test & Coverage
+    name: Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
